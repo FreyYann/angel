@@ -31,22 +31,26 @@ Spark on Angel同时支持YARN和Local两种运行模型，从而方便用户在
 脚本内容如下：
 
 ```bash
-#! /bin/bash
+#!/bin/bash
+
 source ./spark-on-angel-env.sh
+
 $SPARK_HOME/bin/spark-submit \
     --master yarn-cluster \
     --conf spark.ps.jars=$SONA_ANGEL_JARS \
     --conf spark.ps.instances=10 \
     --conf spark.ps.cores=2 \
     --conf spark.ps.memory=6g \
-    --queue g_teg_angel-offline \
-    --jars $SONA_SPARK_JARS \
-    --name "BreezeSGD-spark-on-angel" \
+    --jars $SONA_SPARK_JARS\
+    --name "LR-spark-on-angel" \
     --driver-memory 10g \
     --num-executors 10 \
     --executor-cores 2 \
     --executor-memory 4g \
-    --class com.tencent.angel.spark.examples.ml.BreezeSGD \
+    --class com.tencent.angel.spark.examples.basic.LR \
+    ./../lib/spark-on-angel-examples-${ANGEL_VERSION}.jar \
+    input:<input_path> \
+    lr:0.1 \
     ./../lib/spark-on-angel-examples-${ANGEL_VERSION}.jar
 ```
 
@@ -58,26 +62,20 @@ $SPARK_HOME/bin/spark-submit \
 [完整代码](https://github.com/Tencent/angel/blob/branch-1.3.0/spark-on-angel/examples/src/main/scala/com/tencent/angel/spark/examples/ml/AngelLR.scala)
 
 ```scala
-   PSContext.getOrCreate(sc)
-
-   val psW = PSVector.dense(dim)
-   val psG = PSVector.duplicate(psW)
-
-   println("Initial psW: " + psW.dimension)
-
-   for (i <- 1 to ITERATIONS) {
-     println("On iteration " + i)
-
-     val localW = new DenseVector(psW.pull())
-
-     trainData.map { case (x, label) =>
-       val g = -label * (1 - 1.0 / (1.0 + math.exp(-label * localW.dot(x)))) * x
-       psG.increment(g.toArray)
-     }.count()
-
-     psW.toBreeze -= (psG.toBreeze :* (1.0 / sampleNum))
-     psG.zero()
-    }
-
-   println(s"Final psW: ${psW.pull().mkString(" ")}")
+PSContext.getOrCreate(sc)
+val psW = PSVector.dense(numFeatures) // weights
+val psG = PSVector.duplicate(psW) // gradients of weights
+println("Initial psW: " + psW.dimension)
+for (i <- 1 to ITERATIONS) {
+  println("On iteration " + i)
+  val localW = psW.pull()
+  trainData.map { case (x, label) =>
+    val g = x.mul(-label * (1 - 1.0 / (1.0 + math.exp(-label * localW.dot(x)))))
+    psG.increment(g)
+  }.count()
+  VectorUtils.axpy(-lr / numFeatures, psG, psW)
+  psG.reset
+}
+println(s"Final psW: ${psW.pull().asInstanceOf[IntDoubleVector].getStorage.getValues.mkString(" ")}")
 ```
+

@@ -1,18 +1,20 @@
 /*
  * Tencent is pleased to support the open source community by making Angel available.
  *
- * Copyright (C) 2017 THL A29 Limited, a Tencent company. All rights reserved.
+ * Copyright (C) 2017-2018 THL A29 Limited, a Tencent company. All rights reserved.
  *
- * Licensed under the BSD 3-Clause License (the "License"); you may not use this file except in
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in 
  * compliance with the License. You may obtain a copy of the License at
  *
- * https://opensource.org/licenses/BSD-3-Clause
+ * https://opensource.org/licenses/Apache-2.0
  *
- * Unless required by applicable law or agreed to in writing, software distributed under the License is
- * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ *
  */
+
 
 package com.tencent.angel.utils;
 
@@ -24,7 +26,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -37,7 +41,7 @@ public class ConfUtils {
   private static final Log LOG = LogFactory.getLog(AngelRunJar.class);
   private static final String angelSysConfFile = "angel-site.xml";
 
-  public static Configuration initConf(String [] cmdArgs) throws Exception {
+  public static Configuration initConf(String[] cmdArgs) throws Exception {
     // Parse cmd parameters
     Map<String, String> cmdConfMap = parseArgs(cmdArgs);
 
@@ -64,28 +68,34 @@ public class ConfUtils {
     // load user configuration:
     // load user config file
     String jobConfFile = cmdConfMap.get(AngelConf.ANGEL_APP_CONFIG_FILE);
-    if(jobConfFile != null) {
+    if (jobConfFile != null) {
       LOG.info("user app config file " + jobConfFile);
       conf.addResource(new Path(jobConfFile));
     } else {
       jobConfFile = conf.get(AngelConf.ANGEL_APP_CONFIG_FILE);
-      if(jobConfFile != null) {
+      if (jobConfFile != null) {
         LOG.info("user app config file " + jobConfFile);
         conf.addResource(new Path(jobConfFile));
       }
     }
 
     // load command line parameters
-    if(cmdConfMap != null && !cmdConfMap.isEmpty()) {
-      for(Map.Entry<String, String> entry : cmdConfMap.entrySet()) {
+    if (cmdConfMap != null && !cmdConfMap.isEmpty()) {
+      for (Map.Entry<String, String> entry : cmdConfMap.entrySet()) {
         conf.set(entry.getKey(), entry.getValue());
       }
     }
 
     // load user job resource files
     String userResourceFiles = conf.get(AngelConf.ANGEL_APP_USER_RESOURCE_FILES);
-    if(userResourceFiles != null) {
+    if (userResourceFiles != null) {
       addResourceFiles(conf, userResourceFiles);
+    }
+
+    // load ml conf file for graph based algorithm
+    String mlConfFiles = conf.get(AngelConf.ANGEL_ML_CONF);
+    if (mlConfFiles != null && mlConfFiles.length() != 0) {
+      addResourceFiles(conf, mlConfFiles);
     }
 
     // load user job jar if it exist
@@ -183,14 +193,11 @@ public class ConfUtils {
       for (int i = 0; i < jars.length; i++) {
         if (new Path(jars[i]).isAbsoluteAndSchemeAuthorityNull()) {
           sb.append("file://").append(jars[i]);
-          if (i != jars.length - 1) {
-            sb.append(",");
-          }
         } else {
           sb.append(jars[i]);
-          if (i != jars.length - 1) {
-            sb.append(",");
-          }
+        }
+        if (i != jars.length - 1) {
+          sb.append(",");
         }
       }
       conf.set(AngelConf.ANGEL_JOB_LIBJARS, sb.toString());
@@ -198,16 +205,32 @@ public class ConfUtils {
     }
   }
 
-  private static void addResourceFiles(Configuration conf, String fileNames)
+  public static void addResourceFiles(Configuration conf, String fileNames)
     throws MalformedURLException {
     String[] fileNameArray = fileNames.split(",");
     StringBuilder sb = new StringBuilder();
+
     for (int i = 0; i < fileNameArray.length; i++) {
-      if (i != 0) {
+      Path filePath = new Path(fileNameArray[i]);
+      if(!filePath.isAbsolute()) {
+        String pwd = "";
+        File pwdFile = new File("");
+        try{
+          pwd = pwdFile.getAbsolutePath();
+        } catch(Throwable e){
+          LOG.warn("get pwd failed " + e.getMessage());
+        }
+        LOG.info("PWD=" + pwd);
+
+        sb.append("file://").append(pwd).append(File.separatorChar).append(fileNameArray[i]);
+      } else if (filePath.isAbsoluteAndSchemeAuthorityNull()) {
+        sb.append("file://").append(fileNameArray[i]);
+      } else {
+        sb.append(fileNameArray[i]);
+      }
+      if (i != fileNameArray.length - 1) {
         sb.append(",");
       }
-      URL url = new File(fileNameArray[i]).toURI().toURL();
-      sb.append(url.toString());
     }
 
     String addJars = conf.get(AngelConf.ANGEL_JOB_LIBJARS);
@@ -216,6 +239,17 @@ public class ConfUtils {
       conf.set(AngelConf.ANGEL_JOB_LIBJARS, sb.toString());
     } else {
       conf.set(AngelConf.ANGEL_JOB_LIBJARS, sb.toString() + "," + addJars);
+    }
+  }
+
+  public static void addResourceProperties(Configuration conf, String fileName) throws IOException {
+    Properties properties = new Properties();
+    InputStream inStream = new FileInputStream(fileName);
+    properties.load(inStream);
+    for (Map.Entry<Object, Object> confTuple : properties.entrySet()) {
+      String key = confTuple.getKey().toString();
+      String value = confTuple.getValue().toString();
+      conf.set(key, value);
     }
   }
 

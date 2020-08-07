@@ -1,24 +1,26 @@
 /*
  * Tencent is pleased to support the open source community by making Angel available.
  *
- * Copyright (C) 2017 THL A29 Limited, a Tencent company. All rights reserved.
+ * Copyright (C) 2017-2018 THL A29 Limited, a Tencent company. All rights reserved.
  *
- * Licensed under the BSD 3-Clause License (the "License"); you may not use this file except in
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in
  * compliance with the License. You may obtain a copy of the License at
  *
- * https://opensource.org/licenses/BSD-3-Clause
+ * https://opensource.org/licenses/Apache-2.0
  *
- * Unless required by applicable law or agreed to in writing, software distributed under the License is
- * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ *
  */
+
 
 package com.tencent.angel;
 
 import com.tencent.angel.common.Serialize;
+import com.tencent.angel.common.StreamSerialize;
 import io.netty.buffer.ByteBuf;
-
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -26,9 +28,8 @@ import java.io.IOException;
 
 /**
  * The type Partition key,represent a part of matrix
- *
  */
-public class PartitionKey implements Comparable<PartitionKey>, Serialize {
+public class PartitionKey implements Comparable<PartitionKey>, Serialize, StreamSerialize {
 
   int partitionId = 0;
   int matrixId = 0;
@@ -37,15 +38,22 @@ public class PartitionKey implements Comparable<PartitionKey>, Serialize {
    * Elements in this partition row number are in [startRow, endRow) and column number are in
    * [StartCol, endCol);
    */
-  int startRow = 0;
-  long startCol = 0;
-  int endRow = 0;
-  long endCol = 0;
+  int startRow = -1;
+  long startCol = -1;
+  int endRow = -1;
+  long endCol = -1;
+  int indexNum = -1;
 
-  public PartitionKey() {}
+  public PartitionKey() {
+  }
 
   public PartitionKey(int partitionId, int matrixId, int startRow, long startCol, int endRow,
       long endCol) {
+    this(partitionId, matrixId, startRow, startCol, endRow, endCol, -1);
+  }
+
+  public PartitionKey(int partitionId, int matrixId, int startRow, long startCol, int endRow,
+      long endCol, int indexNum) {
     super();
     this.partitionId = partitionId;
     this.matrixId = matrixId;
@@ -53,6 +61,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Serialize {
     this.startCol = startCol;
     this.endRow = endRow;
     this.endCol = endCol;
+    this.indexNum = indexNum;
   }
 
   public PartitionKey(int matrixId, int partId) {
@@ -69,6 +78,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Serialize {
     builder.append("startCol=").append(startCol).append(", ");
     builder.append("endRow=").append(endRow).append(", ");
     builder.append("endCol=").append(endCol).append(")");
+    builder.append("indexNum=").append(indexNum).append(")");
     return builder.toString();
   }
 
@@ -108,18 +118,20 @@ public class PartitionKey implements Comparable<PartitionKey>, Serialize {
     this.endCol = endCol;
   }
 
-  public void write(DataOutputStream out) throws IOException {
-    out.writeInt(startRow);
-    out.writeLong(startCol);
-    out.writeInt(endRow);
-    out.writeLong(endCol);
+  public void setStartCol(long startCol) {
+    this.startCol = startCol;
   }
 
-  public void read(DataInputStream input) throws IOException {
-    startRow = input.readInt();
-    startCol = input.readLong();
-    endRow = input.readInt();
-    endCol = input.readLong();
+  public void setEndCol(long endCol) {
+    this.endCol = endCol;
+  }
+
+  public int getIndexNum() {
+    return indexNum;
+  }
+
+  public void setIndexNum(int indexNum) {
+    this.indexNum = indexNum;
   }
 
   public void setPartitionId(int partitionId) {
@@ -163,6 +175,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Serialize {
     buf.writeInt(endRow);
     buf.writeLong(startCol);
     buf.writeLong(endCol);
+    buf.writeInt(indexNum);
   }
 
   @Override
@@ -173,11 +186,39 @@ public class PartitionKey implements Comparable<PartitionKey>, Serialize {
     endRow = buf.readInt();
     startCol = buf.readLong();
     endCol = buf.readLong();
+    indexNum = buf.readInt();
   }
 
   @Override
   public int bufferLen() {
-    return 8;
+    return 5 * 4 + 2 * 8;
+  }
+
+  @Override
+  public void serialize(DataOutputStream output) throws IOException {
+    output.writeInt(matrixId);
+    output.writeInt(partitionId);
+    output.writeInt(startRow);
+    output.writeInt(endRow);
+    output.writeLong(startCol);
+    output.writeLong(endCol);
+    output.writeInt(indexNum);
+  }
+
+  @Override
+  public void deserialize(DataInputStream input) throws IOException {
+    matrixId = input.readInt();
+    partitionId = input.readInt();
+    startRow = input.readInt();
+    endRow = input.readInt();
+    startCol = input.readLong();
+    endCol = input.readLong();
+    indexNum = input.readInt();
+  }
+
+  @Override
+  public int dataLen() {
+    return bufferLen();
   }
 
   @Override
@@ -191,15 +232,19 @@ public class PartitionKey implements Comparable<PartitionKey>, Serialize {
 
   @Override
   public boolean equals(Object obj) {
-    if (this == obj)
+    if (this == obj) {
       return true;
-    if (obj == null)
+    }
+    if (obj == null) {
       return false;
-    if (getClass() != obj.getClass())
+    }
+    if (getClass() != obj.getClass()) {
       return false;
+    }
     PartitionKey other = (PartitionKey) obj;
-    if (matrixId != other.matrixId)
+    if (matrixId != other.matrixId) {
       return false;
+    }
     return partitionId == other.partitionId;
   }
 }

@@ -1,18 +1,21 @@
 /*
  * Tencent is pleased to support the open source community by making Angel available.
  *
- * Copyright (C) 2017 THL A29 Limited, a Tencent company. All rights reserved.
+ * Copyright (C) 2017-2018 THL A29 Limited, a Tencent company. All rights reserved.
  *
- * Licensed under the BSD 3-Clause License (the "License"); you may not use this file except in
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in
  * compliance with the License. You may obtain a copy of the License at
  *
- * https://opensource.org/licenses/BSD-3-Clause
+ * https://opensource.org/licenses/Apache-2.0
  *
- * Unless required by applicable law or agreed to in writing, software distributed under the License is
- * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ *
  */
+
+
 package com.tencent.angel.protobuf;
 
 import com.esotericsoftware.kryo.Kryo;
@@ -22,22 +25,77 @@ import com.google.protobuf.ServiceException;
 import com.tencent.angel.PartitionKey;
 import com.tencent.angel.common.location.Location;
 import com.tencent.angel.exception.StandbyException;
+import com.tencent.angel.master.matrix.committer.SaveResult;
 import com.tencent.angel.master.task.AMTask;
 import com.tencent.angel.master.worker.attempt.WorkerAttempt;
 import com.tencent.angel.master.worker.worker.AMWorker;
 import com.tencent.angel.master.worker.workergroup.AMWorkerGroup;
-import com.tencent.angel.ml.matrix.*;
-import com.tencent.angel.ml.matrix.transport.PSLocation;
-import com.tencent.angel.protobuf.generated.MLProtos;
-import com.tencent.angel.protobuf.generated.MLProtos.*;
-import com.tencent.angel.protobuf.generated.PSMasterServiceProtos;
-import com.tencent.angel.protobuf.generated.WorkerMasterServiceProtos.*;
+import com.tencent.angel.ml.matrix.MatrixContext;
+import com.tencent.angel.ml.matrix.MatrixMeta;
+import com.tencent.angel.ml.matrix.MatrixReport;
+import com.tencent.angel.ml.matrix.PartContext;
+import com.tencent.angel.ml.matrix.PartReport;
+import com.tencent.angel.ml.matrix.PartitionMeta;
+import com.tencent.angel.ml.matrix.RowType;
+import com.tencent.angel.model.LoadState;
+import com.tencent.angel.model.MatrixLoadContext;
+import com.tencent.angel.model.MatrixSaveContext;
+import com.tencent.angel.model.ModelLoadContext;
+import com.tencent.angel.model.ModelSaveContext;
+import com.tencent.angel.model.PSMatricesLoadContext;
+import com.tencent.angel.model.PSMatricesLoadResult;
+import com.tencent.angel.model.PSMatricesSaveContext;
+import com.tencent.angel.model.PSMatricesSaveResult;
+import com.tencent.angel.model.PSMatrixLoadContext;
+import com.tencent.angel.model.PSMatrixSaveContext;
+import com.tencent.angel.model.SaveState;
+import com.tencent.angel.protobuf.generated.ClientMasterServiceProtos.MatrixLoadContextProto;
+import com.tencent.angel.protobuf.generated.ClientMasterServiceProtos.MatrixSaveContextProto;
+import com.tencent.angel.protobuf.generated.ClientMasterServiceProtos.ModelLoadContextProto;
+import com.tencent.angel.protobuf.generated.ClientMasterServiceProtos.ModelSaveContextProto;
+import com.tencent.angel.protobuf.generated.MLProtos.CreateMatricesRequest;
+import com.tencent.angel.protobuf.generated.MLProtos.LocationProto;
+import com.tencent.angel.protobuf.generated.MLProtos.MatrixClock;
+import com.tencent.angel.protobuf.generated.MLProtos.MatrixContextProto;
+import com.tencent.angel.protobuf.generated.MLProtos.MatrixMetaProto;
+import com.tencent.angel.protobuf.generated.MLProtos.PSAgentAttemptIdProto;
+import com.tencent.angel.protobuf.generated.MLProtos.PSAgentIdProto;
+import com.tencent.angel.protobuf.generated.MLProtos.PSAttemptIdProto;
+import com.tencent.angel.protobuf.generated.MLProtos.PSFailedReportProto;
+import com.tencent.angel.protobuf.generated.MLProtos.PSFailedReportsProto;
+import com.tencent.angel.protobuf.generated.MLProtos.PSIdProto;
+import com.tencent.angel.protobuf.generated.MLProtos.PSLocationProto;
+import com.tencent.angel.protobuf.generated.MLProtos.PSStatus;
+import com.tencent.angel.protobuf.generated.MLProtos.Pair;
+import com.tencent.angel.protobuf.generated.MLProtos.PartContextProto;
+import com.tencent.angel.protobuf.generated.MLProtos.PartitionMetaProto;
+import com.tencent.angel.protobuf.generated.MLProtos.TaskIdProto;
+import com.tencent.angel.protobuf.generated.MLProtos.WorkerAttemptIdProto;
+import com.tencent.angel.protobuf.generated.MLProtos.WorkerGroupIdProto;
+import com.tencent.angel.protobuf.generated.MLProtos.WorkerIdProto;
+import com.tencent.angel.protobuf.generated.PSMasterServiceProtos.MatrixReportProto;
+import com.tencent.angel.protobuf.generated.PSMasterServiceProtos.PSMatricesLoadContextProto;
+import com.tencent.angel.protobuf.generated.PSMasterServiceProtos.PSMatricesLoadResultProto;
+import com.tencent.angel.protobuf.generated.PSMasterServiceProtos.PSMatricesSaveContextProto;
+import com.tencent.angel.protobuf.generated.PSMasterServiceProtos.PSMatricesSaveResultProto;
+import com.tencent.angel.protobuf.generated.PSMasterServiceProtos.PSMatrixLoadContextProto;
+import com.tencent.angel.protobuf.generated.PSMasterServiceProtos.PSMatrixSaveContextProto;
+import com.tencent.angel.protobuf.generated.PSMasterServiceProtos.PartReportProto;
+import com.tencent.angel.protobuf.generated.PSMasterServiceProtos.RecoverPartKeyProto;
+import com.tencent.angel.protobuf.generated.PSMasterServiceProtos.SaveResultProto;
+import com.tencent.angel.protobuf.generated.WorkerMasterServiceProtos.GetWorkerGroupMetaInfoResponse;
 import com.tencent.angel.protobuf.generated.WorkerMasterServiceProtos.GetWorkerGroupMetaInfoResponse.WorkerGroupStatus;
+import com.tencent.angel.protobuf.generated.WorkerMasterServiceProtos.SplitInfoProto;
+import com.tencent.angel.protobuf.generated.WorkerMasterServiceProtos.TaskMetaInfoProto;
+import com.tencent.angel.protobuf.generated.WorkerMasterServiceProtos.WorkerGroupMetaInfoProto;
+import com.tencent.angel.protobuf.generated.WorkerMasterServiceProtos.WorkerLocationProto;
+import com.tencent.angel.protobuf.generated.WorkerMasterServiceProtos.WorkerMetaInfoProto;
 import com.tencent.angel.ps.PSAttemptId;
 import com.tencent.angel.ps.ParameterServerId;
-import com.tencent.angel.ps.Partitioner;
-import com.tencent.angel.ps.impl.matrix.PartitionState;
-import com.tencent.angel.ps.recovery.ha.RecoverPartKey;
+import com.tencent.angel.ps.ha.RecoverPartKey;
+import com.tencent.angel.ps.server.data.PSLocation;
+import com.tencent.angel.ps.storage.matrix.PartitionState;
+import com.tencent.angel.ps.storage.partitioner.Partitioner;
 import com.tencent.angel.psagent.PSAgentAttemptId;
 import com.tencent.angel.psagent.PSAgentId;
 import com.tencent.angel.split.SplitClassification;
@@ -48,11 +106,6 @@ import com.tencent.angel.worker.WorkerGroupId;
 import com.tencent.angel.worker.WorkerId;
 import com.tencent.angel.worker.task.TaskId;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -60,6 +113,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataInputStream;
 
 /**
  * Protobufs utility.
@@ -71,117 +128,119 @@ public final class ProtobufUtil {
       new ConcurrentHashMap<WorkerAttemptIdProto, WorkerAttemptId>();
   static Map<WorkerAttemptId, WorkerAttemptIdProto> workerAttemptIdToProtoMap =
       new ConcurrentHashMap<WorkerAttemptId, WorkerAttemptIdProto>();
-  
-  static Map<TaskIdProto, TaskId> protoToTaskIdMap =
-      new ConcurrentHashMap<TaskIdProto, TaskId>();
-  static Map<TaskId, TaskIdProto> taskIdToProtoMap =
-      new ConcurrentHashMap<TaskId, TaskIdProto>();
-  
+
+  static Map<TaskIdProto, TaskId> protoToTaskIdMap = new ConcurrentHashMap<TaskIdProto, TaskId>();
+  static Map<TaskId, TaskIdProto> taskIdToProtoMap = new ConcurrentHashMap<TaskId, TaskIdProto>();
+
   static Map<PSAttemptIdProto, PSAttemptId> protoToPSAttemptIdMap =
       new ConcurrentHashMap<PSAttemptIdProto, PSAttemptId>();
   static Map<PSAttemptId, PSAttemptIdProto> psAttemptIdToProtoMap =
       new ConcurrentHashMap<PSAttemptId, PSAttemptIdProto>();
-  
+
   static Map<PSAgentAttemptIdProto, PSAgentAttemptId> protoToPSAgentAttemptIdMap =
       new ConcurrentHashMap<PSAgentAttemptIdProto, PSAgentAttemptId>();
   static Map<PSAgentAttemptId, PSAgentAttemptIdProto> psAgentAttemptIdToProtoMap =
       new ConcurrentHashMap<PSAgentAttemptId, PSAgentAttemptIdProto>();
-  
+
   public static TaskId convertToId(TaskIdProto idProto) {
     TaskId id = protoToTaskIdMap.get(idProto);
-    if(id == null){
+    if (id == null) {
       id = new TaskId(idProto.getTaskIndex());
       protoToTaskIdMap.put(idProto, id);
     }
-    
+
     return id;
   }
 
   public static TaskIdProto convertToIdProto(TaskId id) {
     TaskIdProto idProto = taskIdToProtoMap.get(id);
-    if(idProto == null){
+    if (idProto == null) {
       idProto = TaskIdProto.newBuilder().setTaskIndex(id.getIndex()).build();
       taskIdToProtoMap.put(id, idProto);
     }
-    
+
     return idProto;
   }
-  
-  public static WorkerGroupIdProto convertToIdProto(WorkerGroupId id){
+
+  public static WorkerGroupIdProto convertToIdProto(WorkerGroupId id) {
     return WorkerGroupIdProto.newBuilder().setWorkerGroupIndex(id.getIndex()).build();
   }
-  
-  public static WorkerGroupId convertToId(WorkerGroupIdProto idProto){
+
+  public static WorkerGroupId convertToId(WorkerGroupIdProto idProto) {
     return new WorkerGroupId(idProto.getWorkerGroupIndex());
   }
-  
-  public static WorkerIdProto convertToIdProto(WorkerId id){
-    return WorkerIdProto.newBuilder().setWorkerGroupId(convertToIdProto(id.getWorkerGroupId())).setWorkerIndex(id.getIndex()).build();
+
+  public static WorkerIdProto convertToIdProto(WorkerId id) {
+    return WorkerIdProto.newBuilder().setWorkerGroupId(convertToIdProto(id.getWorkerGroupId()))
+        .setWorkerIndex(id.getIndex()).build();
   }
-  
-  public static WorkerId convertToId(WorkerIdProto idProto){
+
+  public static WorkerId convertToId(WorkerIdProto idProto) {
     return new WorkerId(convertToId(idProto.getWorkerGroupId()), idProto.getWorkerIndex());
   }
-  
-  public static PSIdProto convertToIdProto(ParameterServerId id){
+
+  public static PSIdProto convertToIdProto(ParameterServerId id) {
     return PSIdProto.newBuilder().setPsIndex(id.getIndex()).build();
   }
-  
-  public static ParameterServerId convertToId(PSIdProto idProto){
+
+  public static ParameterServerId convertToId(PSIdProto idProto) {
     return new ParameterServerId(idProto.getPsIndex());
   }
-  
-  public static PSAttemptIdProto convertToIdProto(PSAttemptId id){
-    return PSAttemptIdProto.newBuilder().setPsId(convertToIdProto(id.getPsId())).setAttemptIndex(id.getIndex()).build();
+
+  public static PSAttemptIdProto convertToIdProto(PSAttemptId id) {
+    return PSAttemptIdProto.newBuilder().setPsId(convertToIdProto(id.getPsId()))
+        .setAttemptIndex(id.getIndex()).build();
   }
-  
-  public static PSAttemptId convertToId(PSAttemptIdProto idProto){
+
+  public static PSAttemptId convertToId(PSAttemptIdProto idProto) {
     return new PSAttemptId(convertToId(idProto.getPsId()), idProto.getAttemptIndex());
   }
-  
-  public static WorkerAttemptId convertToId(WorkerAttemptIdProto idProto){
+
+  public static WorkerAttemptId convertToId(WorkerAttemptIdProto idProto) {
     WorkerAttemptId id = protoToWorkerAttemptIdMap.get(idProto);
-    if(id == null){
+    if (id == null) {
       id = new WorkerAttemptId(convertToId(idProto.getWorkerId()), idProto.getAttemptIndex());
       protoToWorkerAttemptIdMap.put(idProto, id);
     }
-    
+
     return id;
   }
-  
+
   public static WorkerAttemptIdProto convertToIdProto(WorkerAttemptId id) {
     WorkerAttemptIdProto idProto = workerAttemptIdToProtoMap.get(id);
-    if(idProto == null){
-      idProto = WorkerAttemptIdProto.newBuilder().setWorkerId(convertToIdProto(id.getWorkerId())).setAttemptIndex(id.getIndex()).build();
+    if (idProto == null) {
+      idProto = WorkerAttemptIdProto.newBuilder().setWorkerId(convertToIdProto(id.getWorkerId()))
+          .setAttemptIndex(id.getIndex()).build();
       workerAttemptIdToProtoMap.put(id, idProto);
     }
-    
+
     return idProto;
   }
-  
+
   public static PSAgentAttemptIdProto convertToIdProto(PSAgentAttemptId id) {
     PSAgentAttemptIdProto idProto = psAgentAttemptIdToProtoMap.get(id);
-    if(idProto == null){
-      idProto = PSAgentAttemptIdProto.newBuilder().setPsAgentId(convertToIdProto(id.getPsAgentId())).setAttemptIndex(id.getIndex()).build();
+    if (idProto == null) {
+      idProto = PSAgentAttemptIdProto.newBuilder().setPsAgentId(convertToIdProto(id.getPsAgentId()))
+          .setAttemptIndex(id.getIndex()).build();
       psAgentAttemptIdToProtoMap.put(id, idProto);
     }
     return idProto;
   }
-  
+
   public static PSAgentIdProto convertToIdProto(PSAgentId id) {
     return PSAgentIdProto.newBuilder().setPsAgentIndex(id.getIndex()).build();
   }
 
   public static PSAgentAttemptId convertToId(PSAgentAttemptIdProto idProto) {
     PSAgentAttemptId id = protoToPSAgentAttemptIdMap.get(idProto);
-    if(id == null){
+    if (id == null) {
       id = new PSAgentAttemptId(convertToId(idProto.getPsAgentId()), idProto.getAttemptIndex());
       protoToPSAgentAttemptIdMap.put(idProto, id);
     }
-    
+
     return id;
   }
-  
+
   public static PSAgentId convertToId(PSAgentIdProto id) {
     return new PSAgentId(id.getPsAgentIndex());
   }
@@ -245,7 +304,7 @@ public final class ProtobufUtil {
       builder.addWorkers(buildWorkerMetaProto(w));
     }
 
-    if(splits != null) {
+    if (splits != null) {
       List<SplitInfo> splitInfoList = SerdeUtils.serilizeSplits(splits, conf);
       SplitInfoProto.Builder splitBuilder = SplitInfoProto.newBuilder();
       for (SplitInfo split : splitInfoList) {
@@ -258,7 +317,7 @@ public final class ProtobufUtil {
 
   private static WorkerMetaInfoProto buildWorkerMetaProto(AMWorker worker) {
     WorkerMetaInfoProto.Builder builder = WorkerMetaInfoProto.newBuilder();
-    
+
     WorkerAttempt attempt = worker.getRunningAttempt();
     WorkerAttemptIdProto workerAttemptIdProto = convertToIdProto(attempt.getId());
     Location location = attempt.getLocation();
@@ -280,8 +339,9 @@ public final class ProtobufUtil {
       Int2IntOpenHashMap matrixClocks = task.getMatrixClocks();
       for (it.unimi.dsi.fastutil.ints.Int2IntMap.Entry clockEntry : matrixClocks
           .int2IntEntrySet()) {
-        taskMetaBuilder.addMatrixClock(clockBuilder.setMatrixId(clockEntry.getIntKey())
-            .setClock(clockEntry.getIntValue()).build());
+        taskMetaBuilder.addMatrixClock(
+            clockBuilder.setMatrixId(clockEntry.getIntKey()).setClock(clockEntry.getIntValue())
+                .build());
       }
       builder.addTasks(taskMetaBuilder.build());
       LOG.debug("task meta=" + taskMetaBuilder.build());
@@ -296,11 +356,10 @@ public final class ProtobufUtil {
   }
 
   public static CreateMatricesRequest buildCreateMatricesRequest(List<MatrixContext> matrices) {
-    CreateMatricesRequest.Builder createMatricesReqBuilder =
-      CreateMatricesRequest.newBuilder();
+    CreateMatricesRequest.Builder createMatricesReqBuilder = CreateMatricesRequest.newBuilder();
     if (matrices != null) {
       int size = matrices.size();
-      for(int i = 0; i < size; i++) {
+      for (int i = 0; i < size; i++) {
         createMatricesReqBuilder.addMatrices(convertToMatrixContextProto(matrices.get(i)));
       }
     }
@@ -309,23 +368,64 @@ public final class ProtobufUtil {
   }
 
   public static MatrixContextProto convertToMatrixContextProto(MatrixContext mContext) {
-    return MatrixContextProto.newBuilder().setName(mContext.getName())
-      .setId(mContext.getMatrixId())
-      .setRowNum(mContext.getRowNum())
-      .setColNum(mContext.getColNum())
-      .setValidIndexNum(mContext.getValidIndexNum())
-      .setBlockRowNum(mContext.getMaxRowNumInBlock())
-      .setBlockColNum(mContext.getMaxColNumInBlock())
-      .setRowType(mContext.getRowType().getNumber())
-      .setPartitionerClassName(mContext.getPartitionerClass().getName())
-      .addAllAttribute(convertToPairs(mContext.getAttributes()))
-      .build();
+    MatrixContextProto.Builder builder =  MatrixContextProto.newBuilder();
+    builder.setName(mContext.getName()).setId(mContext.getMatrixId())
+        .setRowNum(mContext.getRowNum()).setColNum(mContext.getColNum())
+        .setIndexStart(mContext.getIndexStart())
+        .setIndexEnd(mContext.getIndexEnd())
+        .setValidIndexNum(mContext.getValidIndexNum())
+        .setBlockRowNum(mContext.getMaxRowNumInBlock())
+        .setBlockColNum(mContext.getMaxColNumInBlock())
+        .setRowType(mContext.getRowType().getNumber())
+        .setPartitionerClassName(mContext.getPartitionerClass().getName())
+        .addAllParts(convertToPartContextsProto(mContext.getParts()))
+        .addAllAttribute(convertToPairs(mContext.getAttributes()));
+    if(mContext.getInitFunc() != null) {
+      builder.setInitFunc(ByteString.copyFrom(SerdeUtils.serializeInitFunc(mContext.getInitFunc())));
+    }
+
+    return builder.build();
+  }
+
+  public static List<PartContext> convertToPartContexts(List<PartContextProto> partsProto) {
+    if (partsProto != null && !partsProto.isEmpty()) {
+      List<PartContext> parts = new ArrayList<>(partsProto.size());
+      for (PartContextProto partProto : partsProto) {
+        parts.add(convert(partProto));
+      }
+      return parts;
+    } else {
+      return new ArrayList<>();
+    }
+  }
+
+  public static List<PartContextProto> convertToPartContextsProto(List<PartContext> parts) {
+    if (parts != null && !parts.isEmpty()) {
+      List<PartContextProto> partsProto = new ArrayList<>(parts.size());
+      for (PartContext part : parts) {
+        partsProto.add(convert(part));
+      }
+      return partsProto;
+    } else {
+      return new ArrayList<>();
+    }
+  }
+
+  public static PartContext convert(PartContextProto partProto) {
+    return new PartContext(partProto.getStartRow(), partProto.getEndRow(), partProto.getStartCol(),
+        partProto.getEndCol(), partProto.getIndexNum());
+  }
+
+  public static PartContextProto convert(PartContext part) {
+    return PartContextProto.newBuilder().setStartRow(part.getStartRow()).setEndRow(part.getEndRow())
+        .setStartCol(part.getStartCol()).setEndCol(part.getEndCol()).setIndexNum(part.getIndexNum())
+        .build();
   }
 
   public static List<Pair> convertToPairs(Map<String, String> attrs) {
     Pair.Builder builder = Pair.newBuilder();
     List<Pair> pairs = new ArrayList<>(attrs.size());
-    for(Entry<String, String> kv:attrs.entrySet()) {
+    for (Entry<String, String> kv : attrs.entrySet()) {
       pairs.add(builder.setKey(kv.getKey()).setValue(kv.getValue()).build());
     }
     return pairs;
@@ -335,32 +435,40 @@ public final class ProtobufUtil {
     int size = pairs.size();
     Map<String, String> attrs = new HashMap<>(size);
 
-    for(int i = 0; i < size; i++) {
+    for (int i = 0; i < size; i++) {
       attrs.put(pairs.get(i).getKey(), pairs.get(i).getValue());
     }
     return attrs;
   }
 
-  public static List<MatrixContext> convertToMatrixContexts(List<MatrixContextProto> matrixContextProtoList)
-    throws ClassNotFoundException {
+  public static List<MatrixContext> convertToMatrixContexts(
+      List<MatrixContextProto> matrixContextProtoList) throws ClassNotFoundException {
     List<MatrixContext> matrixContexts = new ArrayList<>(matrixContextProtoList.size());
     int size = matrixContextProtoList.size();
-    for(int i = 0; i < size; i++) {
+    for (int i = 0; i < size; i++) {
       matrixContexts.add(convertToMatrixContext(matrixContextProtoList.get(i)));
     }
     return matrixContexts;
   }
 
   public static MatrixContext convertToMatrixContext(MatrixContextProto matrixContextProto)
-    throws ClassNotFoundException {
-    MatrixContext matrixContext = new MatrixContext(matrixContextProto.getName(), matrixContextProto.getRowNum(),
-      matrixContextProto.getColNum(), matrixContextProto.getValidIndexNum(), matrixContextProto.getBlockRowNum(), matrixContextProto.getBlockColNum(),
-      RowType.valueOf(matrixContextProto.getRowType()));
+      throws ClassNotFoundException {
+    MatrixContext matrixContext =
+        new MatrixContext(matrixContextProto.getName(), matrixContextProto.getRowNum(),
+            matrixContextProto.getColNum(), matrixContextProto.getIndexStart(),
+            matrixContextProto.getIndexEnd(), matrixContextProto.getValidIndexNum(),
+            matrixContextProto.getBlockRowNum(), matrixContextProto.getBlockColNum(),
+            convertToPartContexts(matrixContextProto.getPartsList()),
+            RowType.valueOf(matrixContextProto.getRowType()));
 
     matrixContext.setMatrixId(matrixContextProto.getId());
     matrixContext.setPartitionerClass(
-      (Class<? extends Partitioner>) Class.forName(matrixContextProto.getPartitionerClassName()));
-    matrixContext.getAttributes().putAll(convertToAttributes(matrixContextProto.getAttributeList()));
+        (Class<? extends Partitioner>) Class.forName(matrixContextProto.getPartitionerClassName()));
+    matrixContext.getAttributes()
+        .putAll(convertToAttributes(matrixContextProto.getAttributeList()));
+    if(matrixContextProto.hasInitFunc()) {
+      matrixContext.setInitFunc(SerdeUtils.deserializeInitFunc(matrixContextProto.getInitFunc().toByteArray()));
+    }
 
     return matrixContext;
   }
@@ -370,7 +478,7 @@ public final class ProtobufUtil {
     builder.setMatrixContext(convertToMatrixContextProto(matrixMeta.getMatrixContext()));
     Map<Integer, PartitionMeta> matrixMetas = matrixMeta.getPartitionMetas();
 
-    for(Entry<Integer, PartitionMeta> entry : matrixMetas.entrySet()) {
+    for (Entry<Integer, PartitionMeta> entry : matrixMetas.entrySet()) {
       builder.addPartMetas(convertToParitionMetaProto(entry.getValue()));
     }
     return builder.build();
@@ -379,7 +487,7 @@ public final class ProtobufUtil {
   public static List<PSIdProto> convertToPSIdProtos(List<ParameterServerId> psIds) {
     int size = psIds.size();
     List<PSIdProto> psIdProtos = new ArrayList<>(size);
-    for(int i = 0; i < size; i++) {
+    for (int i = 0; i < size; i++) {
       psIdProtos.add(convertToIdProto(psIds.get(i)));
     }
     return psIdProtos;
@@ -388,7 +496,7 @@ public final class ProtobufUtil {
   public static List<ParameterServerId> convertToPSIds(List<PSIdProto> psIdProtos) {
     int size = psIdProtos.size();
     List<ParameterServerId> psIds = new ArrayList<>(size);
-    for(int i = 0; i < size; i++) {
+    for (int i = 0; i < size; i++) {
       psIds.add(convertToId(psIdProtos.get(i)));
     }
     return psIds;
@@ -396,21 +504,22 @@ public final class ProtobufUtil {
 
   public static PartitionMetaProto convertToParitionMetaProto(PartitionMeta partitionMeta) {
     PartitionMetaProto.Builder builder = PartitionMetaProto.newBuilder();
-    builder.setPartitionId(partitionMeta.getPartId())
-      .setStartRow(partitionMeta.getStartRow())
-      .setEndRow(partitionMeta.getEndRow())
-      .setStartCol(partitionMeta.getStartCol())
-      .setEndCol(partitionMeta.getEndCol())
-      .addAllStoredPs(convertToPSIdProtos(partitionMeta.getPss()));
+    builder.setPartitionId(partitionMeta.getPartId()).setStartRow(partitionMeta.getStartRow())
+        .setEndRow(partitionMeta.getEndRow()).setStartCol(partitionMeta.getStartCol())
+        .setEndCol(partitionMeta.getEndCol())
+        .setIndexNum(partitionMeta.getIndexNum())
+        .addAllStoredPs(convertToPSIdProtos(partitionMeta.getPss()));
 
     return builder.build();
   }
 
   public static PSLocationProto convertToPSLocProto(ParameterServerId psId, Location location) {
-    if(location == null) {
-      return PSLocationProto.newBuilder().setPsId(convertToIdProto(psId)).setPsStatus(PSStatus.PS_NOTREADY).build();
+    if (location == null) {
+      return PSLocationProto.newBuilder().setPsId(convertToIdProto(psId))
+          .setPsStatus(PSStatus.PS_NOTREADY).build();
     } else {
-      return PSLocationProto.newBuilder().setPsId(convertToIdProto(psId)).setLocation(convertToLocationProto(location)).setPsStatus(PSStatus.PS_OK).build();
+      return PSLocationProto.newBuilder().setPsId(convertToIdProto(psId))
+          .setLocation(convertToLocationProto(location)).setPsStatus(PSStatus.PS_OK).build();
     }
   }
 
@@ -419,34 +528,38 @@ public final class ProtobufUtil {
   }
 
   public static MatrixMeta convertToMatrixMeta(MatrixMetaProto matrixMetaProto)
-    throws ClassNotFoundException {
+      throws ClassNotFoundException {
     MatrixContext matrixContext = convertToMatrixContext(matrixMetaProto.getMatrixContext());
     MatrixMeta matrixMeta = new MatrixMeta(matrixContext);
     List<PartitionMetaProto> partMetaProtos = matrixMetaProto.getPartMetasList();
     int size = partMetaProtos.size();
-    for(int i = 0; i < size; i++) {
+    for (int i = 0; i < size; i++) {
       matrixMeta.addPartitionMeta(partMetaProtos.get(i).getPartitionId(),
-        convertToParitionMeta(matrixContext.getMatrixId(), partMetaProtos.get(i)));
+          convertToParitionMeta(matrixContext.getMatrixId(), partMetaProtos.get(i)));
     }
     return matrixMeta;
   }
 
-  public static List<MatrixMeta> convertToMatricesMeta(List<MatrixMetaProto> matricesMetaProto) throws ClassNotFoundException{
+  public static List<MatrixMeta> convertToMatricesMeta(List<MatrixMetaProto> matricesMetaProto)
+      throws ClassNotFoundException, IOException {
     int size = matricesMetaProto.size();
     List<MatrixMeta> matricesMeta = new ArrayList<>(size);
-    for(int i = 0; i < size; i++) {
+    for (int i = 0; i < size; i++) {
       matricesMeta.add(convertToMatrixMeta(matricesMetaProto.get(i)));
     }
     return matricesMeta;
   }
 
-  public static PartitionMeta convertToParitionMeta(int matrixId, PartitionMetaProto partMetaProto) {
-    return new PartitionMeta(matrixId, partMetaProto.getPartitionId(), partMetaProto.getStartRow(), partMetaProto.getEndRow(),
-      partMetaProto.getStartCol(), partMetaProto.getEndCol(), convertToPSIds(partMetaProto.getStoredPsList()));
+  public static PartitionMeta convertToParitionMeta(int matrixId,
+      PartitionMetaProto partMetaProto) {
+    return new PartitionMeta(matrixId, partMetaProto.getPartitionId(), partMetaProto.getStartRow(),
+        partMetaProto.getEndRow(), partMetaProto.getStartCol(), partMetaProto.getEndCol(),
+        partMetaProto.getIndexNum(),
+        convertToPSIds(partMetaProto.getStoredPsList()));
   }
 
   public static Location convertToLocation(PSLocationProto psLocation) {
-    if(psLocation.getPsStatus() == PSStatus.PS_NOTREADY) {
+    if (psLocation.getPsStatus() == PSStatus.PS_NOTREADY) {
       return null;
     }
     return new Location(psLocation.getLocation().getIp(), psLocation.getLocation().getPort());
@@ -460,63 +573,104 @@ public final class ProtobufUtil {
     return MatrixMetaProto.parseDelimitedFrom(input);
   }
 
-  public static List<MatrixReport> convertToMatrixReports(List<PSMasterServiceProtos.MatrixReportProto> reportProtos) {
+  public static List<MatrixReport> convertToMatrixReports(List<MatrixReportProto> reportProtos) {
     int size = reportProtos.size();
     List<MatrixReport> reports = new ArrayList<>(size);
-    for(int i = 0; i < size; i++) {
+    for (int i = 0; i < size; i++) {
       reports.add(convertToMatrixReport(reportProtos.get(i)));
     }
 
     return reports;
   }
 
-  public static MatrixReport convertToMatrixReport(PSMasterServiceProtos.MatrixReportProto reportProto) {
-    return new MatrixReport(reportProto.getMatrixId(), convertToPartReports(reportProto.getPartReportsList()));
+  public static MatrixReport convertToMatrixReport(MatrixReportProto reportProto) {
+    return new MatrixReport(reportProto.getMatrixId(),
+        convertToPartReports(reportProto.getPartReportsList()));
   }
 
-  public static List<PartReport> convertToPartReports(List<PSMasterServiceProtos.PartReportProto> reportProtos) {
+  public static List<PartReport> convertToPartReports(List<PartReportProto> reportProtos) {
     int size = reportProtos.size();
     List<PartReport> reports = new ArrayList<>(size);
-    for(int i = 0; i < size; i++) {
+    for (int i = 0; i < size; i++) {
       reports.add(convertToPartReport(reportProtos.get(i)));
     }
     return reports;
   }
 
-  public static PartReport convertToPartReport(PSMasterServiceProtos.PartReportProto reportProto) {
+  public static PartReport convertToPartReport(PartReportProto reportProto) {
     return new PartReport(reportProto.getPartId(), PartitionState.valueOf(reportProto.getStatus()));
   }
 
-  public static PSMasterServiceProtos.RecoverPartKeyProto convert(RecoverPartKey recoverPartKey) {
-    return PSMasterServiceProtos.RecoverPartKeyProto.newBuilder()
-      .setMatrixId(recoverPartKey.partKey.getMatrixId())
-      .setPartId(recoverPartKey.partKey.getPartitionId())
-      .setPsId(convertToIdProto(recoverPartKey.psLoc.psId))
-      .setLoc(convertToLocationProto(recoverPartKey.psLoc.loc))
-      .build();
+  public static RecoverPartKeyProto convert(RecoverPartKey recoverPartKey) {
+    return RecoverPartKeyProto.newBuilder().setMatrixId(recoverPartKey.partKey.getMatrixId())
+        .setPartId(recoverPartKey.partKey.getPartitionId())
+        .setPsId(convertToIdProto(recoverPartKey.psLoc.psId))
+        .setLoc(convertToLocationProto(recoverPartKey.psLoc.loc)).build();
   }
 
-  public static RecoverPartKey convert(PSMasterServiceProtos.RecoverPartKeyProto proto) {
+  public static RecoverPartKey convert(RecoverPartKeyProto proto) {
     return new RecoverPartKey(new PartitionKey(proto.getMatrixId(), proto.getPartId()),
-      new PSLocation(convertToId(proto.getPsId()), convert(proto.getLoc())));
+        new PSLocation(convertToId(proto.getPsId()), convert(proto.getLoc())));
   }
 
   public static Location convert(LocationProto locProto) {
     return new Location(locProto.getIp(), locProto.getPort());
   }
 
-  public static Map<Integer, List<Integer>> convertToNeedSaveMatrices(List<PSMasterServiceProtos.NeedSaveMatrixProto> protos) {
-    Map<Integer, List<Integer>> needSaveMatrices = new HashMap<>(protos.size());
-    for(PSMasterServiceProtos.NeedSaveMatrixProto matrixProto : protos) {
-      needSaveMatrices.put(matrixProto.getMatrixId(), new ArrayList<>(matrixProto.getPartIdsList()));
+  public static List<PSMatrixSaveContext> convertToSaveMatricesContext(
+      List<PSMatrixSaveContextProto> protos) {
+    List<PSMatrixSaveContext> saveMatrices = new ArrayList<>(protos.size());
+    for (PSMatrixSaveContextProto matrixProto : protos) {
+      saveMatrices.add(
+          new PSMatrixSaveContext(matrixProto.getMatrixId(), matrixProto.getPartIdsList(),
+              matrixProto.getRowIndexesList(), matrixProto.getFormatClassName(),
+              matrixProto.getSavePath(), matrixProto.getCloneFirst(), matrixProto.getSortFirst()));
     }
-    return needSaveMatrices;
+    return saveMatrices;
   }
 
+  public static List<PSMatrixSaveContextProto> convertToSaveMatricesContextProto(
+      List<PSMatrixSaveContext> contexts) {
+    List<PSMatrixSaveContextProto> saveMatrices = new ArrayList<>(contexts.size());
+    for (PSMatrixSaveContext context : contexts) {
+      saveMatrices.add(PSMatrixSaveContextProto.newBuilder().
+          setMatrixId(context.getMatrixId()).addAllPartIds(context.getPartIds())
+          .addAllRowIndexes(context.getRowIndexes()).build());
+    }
+    return saveMatrices;
+  }
+
+  public static PSMatrixSaveContext convert(PSMatrixSaveContextProto proto) {
+    return new PSMatrixSaveContext(proto.getMatrixId(), proto.getPartIdsList(),
+        proto.getRowIndexesList(), proto.getFormatClassName(), proto.getSavePath(),
+        proto.getCloneFirst(), proto.getSortFirst());
+  }
+
+  public static PSMatrixSaveContextProto convert(PSMatrixSaveContext context) {
+    return PSMatrixSaveContextProto.newBuilder().
+        setMatrixId(context.getMatrixId()).addAllPartIds(context.getPartIds())
+        .setFormatClassName(context.getFormatClassName()).setSavePath(context.getSavePath())
+        .setCloneFirst(context.cloneFirst()).setSortFirst(context.sortFirst())
+        .addAllRowIndexes(context.getRowIndexes()).build();
+  }
+
+  public static PSFailedReportsProto convertToPSFailedReportsProto(
+      HashMap<PSLocation, Integer> reports) {
+    PSFailedReportsProto.Builder builder = PSFailedReportsProto.newBuilder();
+    for (Entry<PSLocation, Integer> entry : reports.entrySet()) {
+      builder.addPsFailedReports(convert(entry.getKey(), entry.getValue()));
+    }
+    return builder.build();
+  }
+
+  public static PSFailedReportProto convert(PSLocation psLoc, int counter) {
+    return PSFailedReportProto.newBuilder().setPsLoc(convert(psLoc)).setFailedCounter(counter)
+        .build();
+  }
 
   public static PSLocationProto convert(PSLocation psLoc) {
     return PSLocationProto.newBuilder().setPsId(convertToIdProto(psLoc.psId))
-      .setLocation(convertToLocationProto(psLoc.loc)).setPsStatus(PSStatus.PS_OK).build();
+        .setLocation(convertToLocationProto(psLoc.loc)).setPsStatus(PSStatus.PS_OK).build();
   }
 
 
@@ -524,14 +678,191 @@ public final class ProtobufUtil {
     HashMap<PSLocation, Integer> reports = new HashMap<>();
     List<PSFailedReportProto> reportList = reportsProto.getPsFailedReportsList();
     int size = reportList.size();
-    for(int i = 0; i < size; i++) {
+    for (int i = 0; i < size; i++) {
       reports.put(new PSLocation(convertToId(reportList.get(i).getPsLoc().getPsId()),
-        convert(reportList.get(i).getPsLoc().getLocation())), reportList.get(i).getFailedCounter());
+              convert(reportList.get(i).getPsLoc().getLocation())),
+          reportList.get(i).getFailedCounter());
     }
     return reports;
   }
 
   public static PSLocation convert(PSLocationProto psLoc) {
     return new PSLocation(convertToId(psLoc.getPsId()), convertToLocation(psLoc.getLocation()));
+  }
+
+  public static ModelSaveContextProto convert(ModelSaveContext saveContext) {
+    List<MatrixSaveContext> matricesContext = saveContext.getMatricesContext();
+    ModelSaveContextProto.Builder builder = ModelSaveContextProto.newBuilder();
+    builder.setSavePath(saveContext.getSavePath());
+    builder.setCheckpint(saveContext.isCheckpoint());
+    int size = matricesContext.size();
+    for (int i = 0; i < size; i++) {
+      builder.addMatrixContextes(convert(matricesContext.get(i)));
+    }
+
+    return builder.build();
+  }
+
+  public static MatrixSaveContextProto convert(MatrixSaveContext saveContext) {
+    return MatrixSaveContextProto.newBuilder().setMatrixName(saveContext.getMatrixName())
+        .setFormatClassName(saveContext.getFormatClassName())
+        .addAllRowIndexes(saveContext.getRowIndexes()).build();
+  }
+
+  public static ModelSaveContext convert(ModelSaveContextProto saveContext) {
+    ModelSaveContext context = new ModelSaveContext(saveContext.getSavePath());
+    context.setCheckpoint(saveContext.getCheckpint());
+    List<MatrixSaveContextProto> matricesContext = saveContext.getMatrixContextesList();
+    int size = matricesContext.size();
+    for (int i = 0; i < size; i++) {
+      context.addMatrix(convert(matricesContext.get(i)));
+    }
+    return context;
+  }
+
+  public static MatrixSaveContext convert(MatrixSaveContextProto matrixSaveContext) {
+    return new MatrixSaveContext(matrixSaveContext.getMatrixName(),
+        matrixSaveContext.getRowIndexesList(), matrixSaveContext.getFormatClassName());
+  }
+
+  public static PSMatricesSaveResult convert(PSMatricesSaveResultProto subResultProto) {
+    PSMatricesSaveResult result =
+        new PSMatricesSaveResult(subResultProto.getRequestId(), subResultProto.getSubRequestId(),
+            SaveState.valueOf(subResultProto.getSaveState()));
+    if (subResultProto.hasFailedLog()) {
+      result.setErrorMsg(subResultProto.getFailedLog());
+    }
+    return result;
+  }
+
+  public static PSMatricesSaveResultProto convert(PSMatricesSaveResult subResult) {
+    PSMatricesSaveResultProto.Builder builder = PSMatricesSaveResultProto.newBuilder();
+    builder.setRequestId(subResult.getRequestId()).setSubRequestId(subResult.getSubRequestId())
+        .setSaveState(subResult.getState().getStateId());
+    if (subResult.getErrorMsg() != null) {
+      builder.setFailedLog(subResult.getErrorMsg());
+    }
+    return builder.build();
+  }
+
+  public static PSMatricesSaveContextProto convert(PSMatricesSaveContext subSaveRequest) {
+    PSMatricesSaveContextProto.Builder matricesBuilder = PSMatricesSaveContextProto.newBuilder();
+    matricesBuilder.setRequestId(subSaveRequest.getRequestId())
+        .setSubRequestId(subSaveRequest.getSubRequestId());
+    List<PSMatrixSaveContext> matrixContexts = subSaveRequest.getMatrixSaveContexts();
+    int size = matrixContexts.size();
+    for (int i = 0; i < size; i++) {
+      matricesBuilder.addSubSaveContexts(convert(matrixContexts.get(i)));
+    }
+    return matricesBuilder.build();
+  }
+
+  public static PSMatricesLoadContextProto convert(PSMatricesLoadContext loadContext) {
+    PSMatricesLoadContextProto.Builder builder = PSMatricesLoadContextProto.newBuilder();
+    builder.setRequestId(loadContext.getRequestId()).setSubRequestId(loadContext.getSubRequestId());
+    List<PSMatrixLoadContext> matrixContexts = loadContext.getMatrixLoadContexts();
+    int size = matrixContexts.size();
+    for (int i = 0; i < size; i++) {
+      builder.addSubLoadContexts(convert(matrixContexts.get(i)));
+    }
+
+    return builder.build();
+  }
+
+  public static PSMatrixLoadContextProto convert(PSMatrixLoadContext loadContext) {
+    PSMatrixLoadContextProto.Builder builder = PSMatrixLoadContextProto.newBuilder();
+    builder.setMatrixId(loadContext.getMatrixId()).addAllPartIds(loadContext.getPartIds())
+        .setLoadPath(loadContext.getLoadPath())
+        .setFormatClassName(loadContext.getFormatClassName());
+    return builder.build();
+  }
+
+  public static PSMatricesLoadContext convert(PSMatricesLoadContextProto loadContextProto) {
+    List<PSMatrixLoadContext> matrixContexts =
+        new ArrayList<>(loadContextProto.getSubLoadContextsCount());
+    List<PSMatrixLoadContextProto> matrixContextProtos = loadContextProto.getSubLoadContextsList();
+    int size = matrixContextProtos.size();
+    for (int i = 0; i < size; i++) {
+      matrixContexts.add(convert(matrixContextProtos.get(i)));
+    }
+
+    return new PSMatricesLoadContext(loadContextProto.getRequestId(),
+        loadContextProto.getSubRequestId(), matrixContexts);
+  }
+
+  public static PSMatrixLoadContext convert(PSMatrixLoadContextProto loadContextProto) {
+    return new PSMatrixLoadContext(loadContextProto.getMatrixId(), loadContextProto.getLoadPath(),
+        loadContextProto.getPartIdsList(), loadContextProto.getFormatClassName());
+  }
+
+  public static PSMatricesLoadResultProto convert(PSMatricesLoadResult result) {
+    PSMatricesLoadResultProto.Builder builder = PSMatricesLoadResultProto.newBuilder();
+    builder.setRequestId(result.getRequestId()).setSubRequestId(result.getSubRequestId())
+        .setLoadState(result.getState().getStateId()).build();
+    if (result.getErrorMsg() != null) {
+      builder.setFailedLog(result.getErrorMsg());
+    }
+    return builder.build();
+  }
+
+  public static PSMatricesLoadResult convert(PSMatricesLoadResultProto resultProto) {
+    PSMatricesLoadResult result =
+        new PSMatricesLoadResult(resultProto.getRequestId(), resultProto.getSubRequestId(),
+            LoadState.valueOf(resultProto.getLoadState()));
+    if (resultProto.hasFailedLog()) {
+      result.setErrorMsg(resultProto.getFailedLog());
+    }
+    return result;
+  }
+
+  public static PSMatricesSaveContext convert(PSMatricesSaveContextProto saveContextProto) {
+    List<PSMatrixSaveContext> matrixContexts =
+        new ArrayList<>(saveContextProto.getSubSaveContextsCount());
+    List<PSMatrixSaveContextProto> matrixContextProtos = saveContextProto.getSubSaveContextsList();
+    int size = matrixContextProtos.size();
+    for (int i = 0; i < size; i++) {
+      matrixContexts.add(convert(matrixContextProtos.get(i)));
+    }
+
+    return new PSMatricesSaveContext(saveContextProto.getRequestId(),
+        saveContextProto.getSubRequestId(), matrixContexts);
+  }
+
+  public static MatrixLoadContextProto convert(MatrixLoadContext context) {
+    return MatrixLoadContextProto.newBuilder().setMatrixName(context.getMatrixName()).build();
+  }
+
+  public static MatrixLoadContext convert(MatrixLoadContextProto contextProto) {
+    return new MatrixLoadContext(contextProto.getMatrixName());
+  }
+
+  public static ModelLoadContextProto convert(ModelLoadContext context) {
+    ModelLoadContextProto.Builder builder = ModelLoadContextProto.newBuilder();
+    builder.setLoadPath(context.getLoadPath());
+    List<MatrixLoadContext> matrixContexts = context.getMatricesContext();
+    int size = matrixContexts.size();
+    for (int i = 0; i < size; i++) {
+      builder.addMatrixContextes(convert(matrixContexts.get(i)));
+    }
+    return builder.build();
+  }
+
+  public static ModelLoadContext convert(ModelLoadContextProto contextProto) {
+    List<MatrixLoadContextProto> matrixContextProtos = contextProto.getMatrixContextesList();
+    int size = matrixContextProtos.size();
+    List<MatrixLoadContext> matrixContexts = new ArrayList<>(size);
+    for (int i = 0; i < size; i++) {
+      matrixContexts.add(convert(matrixContextProtos.get(i)));
+    }
+    return new ModelLoadContext(contextProto.getLoadPath(), matrixContexts);
+  }
+
+  public static SaveResultProto convert(SaveResult result) {
+    return SaveResultProto.newBuilder().setModelPath(result.getModelPath())
+        .setMatrixPath(result.getMatrixPath()).setSaveTs(result.getSaveTs()).build();
+  }
+
+  public static SaveResult convert(SaveResultProto result) {
+    return new SaveResult(result.getModelPath(), result.getMatrixPath(), result.getSaveTs());
   }
 }

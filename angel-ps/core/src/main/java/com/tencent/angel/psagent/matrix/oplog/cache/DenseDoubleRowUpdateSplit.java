@@ -1,21 +1,24 @@
 /*
  * Tencent is pleased to support the open source community by making Angel available.
  *
- * Copyright (C) 2017 THL A29 Limited, a Tencent company. All rights reserved.
+ * Copyright (C) 2017-2018 THL A29 Limited, a Tencent company. All rights reserved.
  *
- * Licensed under the BSD 3-Clause License (the "License"); you may not use this file except in
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in
  * compliance with the License. You may obtain a copy of the License at
  *
- * https://opensource.org/licenses/BSD-3-Clause
+ * https://opensource.org/licenses/Apache-2.0
  *
- * Unless required by applicable law or agreed to in writing, software distributed under the License is
- * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ *
  */
+
 
 package com.tencent.angel.psagent.matrix.oplog.cache;
 
+import com.tencent.angel.ml.math2.VFactory;
 import com.tencent.angel.ml.matrix.RowType;
 import io.netty.buffer.ByteBuf;
 
@@ -24,7 +27,9 @@ import io.netty.buffer.ByteBuf;
  */
 public class DenseDoubleRowUpdateSplit extends RowUpdateSplit {
 
-  /** values of row */
+  /**
+   * values of row
+   */
   private final double[] values;
 
   /**
@@ -39,9 +44,13 @@ public class DenseDoubleRowUpdateSplit extends RowUpdateSplit {
     this.values = values;
   }
 
+  public DenseDoubleRowUpdateSplit() {
+    this(-1, -1, -1, null);
+  }
+
   /**
    * Get values of row update
-   * 
+   *
    * @return double[] values of row update
    */
   public double[] getValues() {
@@ -51,15 +60,24 @@ public class DenseDoubleRowUpdateSplit extends RowUpdateSplit {
   @Override
   public void serialize(ByteBuf buf) {
     super.serialize(buf);
-    buf.writeInt((int)(end - start));
-    LOG.debug("double size = " + (end - start));
-    for (int i = (int)start; i < end; i++) {
+    buf.writeInt(end - start);
+    for (int i = start; i < end; i++) {
       buf.writeDouble(values[i]);
     }
   }
 
   @Override
+  public void deserialize(ByteBuf buf) {
+    super.deserialize(buf);
+    double[] data = new double[buf.readInt()];
+    for (int i = 0; i < data.length; i++) {
+      data[i] = buf.readDouble();
+    }
+    vector = VFactory.denseDoubleVector(data);
+  }
+
+  @Override
   public int bufferLen() {
-    return super.bufferLen() + (int)size() * 8;
+    return 4 + super.bufferLen() + (end - start) * 8;
   }
 }

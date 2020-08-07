@@ -27,23 +27,26 @@ Once a Spark on Angel application has been packaged, it can be launched by the s
 The script is:
 
 ```bash
-#! /bin/bash
+#!/bin/bash
+
 source ./spark-on-angel-env.sh
+
 $SPARK_HOME/bin/spark-submit \
     --master yarn-cluster \
     --conf spark.ps.jars=$SONA_ANGEL_JARS \
     --conf spark.ps.instances=10 \
     --conf spark.ps.cores=2 \
     --conf spark.ps.memory=6g \
-    --queue g_teg_angel-offline \
-    --jars $SONA_SPARK_JARS \
-    --name "BreezeSGD-spark-on-angel" \
+    --jars $SONA_SPARK_JARS\
+    --name "LR-spark-on-angel" \
     --driver-memory 10g \
     --num-executors 10 \
     --executor-cores 2 \
     --executor-memory 4g \
-    --class com.tencent.angel.spark.examples.ml.BreezeSGD \
-    ./../lib/spark-on-angel-examples-${ANGEL_VERSION}.jar
+    --class com.tencent.angel.spark.examples.basic.LR \
+    ./../lib/spark-on-angel-examples-${ANGEL_VERSION}.jar \
+    input:<input_path> \
+    lr:0.1 \
 ```
 
 ## Minimal Example of LR in Spark on Angel Verion
@@ -51,26 +54,24 @@ $SPARK_HOME/bin/spark-submit \
 [Complete Code](https://github.com/Tencent/angel/blob/branch-1.3.0/spark-on-angel/examples/src/main/scala/com/tencent/angel/spark/examples/ml/AngelLR.scala)
 
 ```scala
-   PSContext.getOrCreate(sc)
+PSContext.getOrCreate(sc)
 
-   val psW = PSVector.dense(dim)
-   val psG = PSVector.duplicate(psW)
+val psW = PSVector.dense(dim) // weights
+val psG = PSVector.duplicate(psW) // gradients of weights
 
-   println("Initial psW: " + psW.dimension)
+println("Initial psW: " + psW.dimension)
+  
+for (i <- 1 to ITERATIONS) {
+  println("On iteration " + i)
+  val localW = psW.pull()
+  trainData.map { case (x, label) =>
+    val g = x.mul(-label * (1 - 1.0 / (1.0 + math.exp(-label * localW.dot(x)))))
+    psG.increment(g)
+  }.count()
 
-   for (i <- 1 to ITERATIONS) {
-     println("On iteration " + i)
+  psW.toBreeze -= (psG.toBreeze *:* (1.0 / sampleNum))
+  psG.reset
+}
 
-     val localW = new DenseVector(psW.pull())
-
-     trainData.map { case (x, label) =>
-       val g = -label * (1 - 1.0 / (1.0 + math.exp(-label * localW.dot(x)))) * x
-       psG.increment(g.toArray)
-     }.count()
-
-     psW.toBreeze -= (psG.toBreeze :* (1.0 / sampleNum))
-     psG.zero()
-    }
-
-   println(s"Final psW: ${psW.pull().mkString(" ")}")
+println(s"Final psW: ${psW.pull().asInstanceOf[IntDoubleVector].getStorage.getValues.mkString(" ")}")
 ```
