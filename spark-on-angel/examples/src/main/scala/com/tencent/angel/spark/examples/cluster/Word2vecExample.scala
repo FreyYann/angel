@@ -53,6 +53,7 @@ object Word2vecExample {
     val checkpointInterval = params.getOrElse("checkpointInterval", "5").toInt
 
     val sc = start()
+    // executor num * defualt(1)
     val numCores = SparkUtils.getNumCores(sc.getConf)
     // The number of partition is more than the cores. We do this to achieve dynamic load balance.
     var numDataPartitions = (numCores * 3.0).toInt
@@ -103,6 +104,7 @@ object Word2vecExample {
       .setMaxLength(maxLength)
       .setModelCPInterval(checkpointInterval)
       .setModelSaveInterval(saveModelInterval)
+
     val model = new Word2VecModel(param)
     if (loadPath.length > 0) {
       model.load(loadPath)

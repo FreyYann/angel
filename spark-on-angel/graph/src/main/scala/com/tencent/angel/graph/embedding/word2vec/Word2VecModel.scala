@@ -157,7 +157,7 @@ class Word2VecModel(numNode: Int,
     // Calculate the gradients
     start = System.currentTimeMillis()
     val dots = dot(srcNodes, dstNodes, negativeSamples, srcFeats, dstFeats, numNegSample)
-    var loss = doGrad(dots, numNegSample, learningRate)
+    var loss: Float = doGrad(dots, numNegSample, learningRate)
     incCalTime(start)
     start = System.currentTimeMillis()
     val (inputUpdates, outputUpdates) = adjust(srcNodes, dstNodes, negativeSamples, srcFeats, dstFeats, numNegSample, dots)
@@ -372,17 +372,37 @@ object Word2VecModel {
         var dstIndex = Math.max(srcIndex - windowSize, 0)
         while (dstIndex < Math.min(srcIndex + windowSize + 1, sen.length)) {
           if (srcIndex != dstIndex) {
-            srcNodes.append(sen(dstIndex))
-            dstNodes.append(sen(srcIndex))
+//            srcNodes.append(sen(dstIndex))
+//            dstNodes.append(sen(srcIndex))
+            srcNodes.append(sen(srcIndex))
+            dstNodes.append(sen(dstIndex))
           }
           dstIndex += 1
         }
       }
     }
-    val negativeSamples = negativeSample(srcNodes.toArray, dstNodes.toArray, negative, maxIndex, rand.nextInt())
+    val negativeSamples = negativeSample2(srcNodes.toArray, dstNodes.toArray, negative, maxIndex, rand.nextInt())
     (srcNodes.toArray, dstNodes.toArray, negativeSamples)
   }
+  def negativeSample2(srcNodes: Array[Int], dstNodes: Array[Int], sampleNum: Int, maxIndex: Int, seed: Int): Array[Array[Int]] = {
+    val rand = new Random(seed)
+    val sampleWords = new Array[Array[Int]](srcNodes.length)
+    var wordIndex: Int = 0
 
+    for (i <- srcNodes.indices) {
+      var sampleIndex: Int = 0
+      sampleWords(wordIndex) = new Array[Int](sampleNum)
+      while (sampleIndex < sampleNum) {
+        val target = rand.nextInt(maxIndex)
+        if (target != srcNodes(i) && target != dstNodes(i)) {
+          sampleWords(wordIndex)(sampleIndex) = target
+          sampleIndex += 1
+        }
+      }
+      wordIndex += 1
+    }
+    sampleWords
+  }
   def negativeSample(srcNodes: Array[Int], dstNodes: Array[Int], sampleNum: Int, maxIndex: Int, seed: Int): Array[Array[Int]] = {
     val rand = new Random(seed)
     val sampleWords = new Array[Array[Int]](srcNodes.length)

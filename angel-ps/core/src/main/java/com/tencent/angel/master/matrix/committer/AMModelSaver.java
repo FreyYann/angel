@@ -834,9 +834,11 @@ public class AMModelSaver extends AbstractService {
   }
 
   private void combine(ModelSaveContext saveContext, ModelSaveResult result) throws IOException {
+
     Path tmpPath = new Path(saveContext.getTmpSavePath());
     final FileSystem fs = tmpPath.getFileSystem(context.getConf());
     final Path tmpCombinePath = HdfsUtil.toFinalPath(tmpPath);
+
     if (fs.exists(tmpCombinePath)) {
       fs.delete(tmpCombinePath, true);
     }

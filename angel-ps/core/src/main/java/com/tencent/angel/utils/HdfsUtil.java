@@ -373,7 +373,6 @@ public class HdfsUtil {
     if(!fs.exists(outputPath.getParent())) {
       fs.mkdirs(outputPath.getParent());
     }
-
     // Rename
     if (!fs.rename(tmpCombinePath, outputPath)) {
       throw new IOException("rename from " + tmpCombinePath + " to " + outputPath + " failed");
@@ -388,7 +387,8 @@ public class HdfsUtil {
         "") + (uri.getPort() > 0 ? (":" + uri.getPort()) : "");
     String user = conf.get(AngelConf.USER_NAME, "");
     String tmpDir = conf.get(AngelConf.ANGEL_JOB_TMP_OUTPUT_PATH_PREFIX, "/tmp/" + user);
-    String finalTmpDirForApp = path + tmpDir + "/" + appId + "_" + UUID.randomUUID().toString();
+//    String finalTmpDirForApp = path + tmpDir + "/" + appId + "_" + UUID.randomUUID().toString();
+    String finalTmpDirForApp = tmpDir + "/" + appId + "_" + UUID.randomUUID().toString();
     LOG.info("tmp output dir is " + finalTmpDirForApp);
     return new Path(finalTmpDirForApp);
   }

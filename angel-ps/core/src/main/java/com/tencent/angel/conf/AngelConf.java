@@ -234,7 +234,7 @@ public class AngelConf extends Configuration {
    */
   public static final String ANGEL_JOB_OUTPUT_PATH_DELETEONEXIST =
       ANGEL_PREFIX + "output.path.deleteonexist";
-  public static final boolean DEFAULT_ANGEL_JOB_OUTPUT_PATH_DELETEONEXIST = false;
+  public static final boolean DEFAULT_ANGEL_JOB_OUTPUT_PATH_DELETEONEXIST = true;
 
   /**
    * Weather delete the stage directory when Angel application exit.

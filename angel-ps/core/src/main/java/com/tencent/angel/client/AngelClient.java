@@ -986,11 +986,11 @@ public abstract class AngelClient implements AngelClientInterface {
         Path logPath = new Path(logPathStr);
         FileSystem logFs = logPath.getFileSystem(conf);
         if (logFs.exists(logPath)) {
-          if (deleteOnExist) {
+//          if (deleteOnExist) {
             logFs.delete(logPath, true);
-          } else {
-            throw new IOException("log path " + logPath + " already exist, please check");
-          }
+//          } else {
+//            throw new IOException("log path " + logPath + " already exist, please check");
+//          }
         }
       }
     }
